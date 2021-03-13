@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 
 import pathlib
 
-from config import config
+import config
 
 
 class BaseHttpResponse(ABC):
@@ -19,8 +19,8 @@ class BaseHttpResponse(ABC):
         if self.body is not None:
             self.content_length = len(self.body)
 
-        self.headers = f"HTTP/{config['HTTP_VERSION']} {self.status}\r\n" + \
-                       f"Server: {config['SERVER_NAME']}\r\n" + \
+        self.headers = f"HTTP/{config.HTTP_VERSION} {self.status}\r\n" + \
+                       f"Server: {config.SERVER_NAME}\r\n" + \
                        f"Date: {time.strftime('%c')}\r\n" + \
                        f"Connection: Close\r\n" + \
                        f"Content-Length: {self.content_length}\r\n" + \

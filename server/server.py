@@ -4,7 +4,8 @@ import sys
 import socket
 import logging
 
-from config import config
+import config
+
 from server.request.request import HttpRequest
 from server.response.response import HttpResponseMethodNotAllowed, BaseHttpResponse, HttpResponseForbidden
 
@@ -56,22 +57,22 @@ class Server:
         except Exception as e:
             result = repr(e)
 
-        response = BaseHttpResponse
 
-        if request.METHOD not in config['METHODS_ACCEPTABLE']:
+        if request.METHOD not in config.METHODS_ACCEPTABLE:
             response = HttpResponseMethodNotAllowed()
+            self._send_response(sock,response)
+            return
 
-        if config['MEDIA_ROOT'] not in request.PATH.parents:
+        if config.MEDIA_ROOT not in request.PATH.parents:
             response = HttpResponseForbidden()
+            self._send_response(sock,response)
+            return
 
+
+    def _send_response(self, sock, response: BaseHttpResponse):
         self.logger.info(f"Sending response:{str(response)}")
         sock.sendall(response.encode())
         self.logger.info("Done")
-
-        out_buffer = result.encode('utf-8') + b'\r\n'
-        self.logger.info('Out buffer = ' + repr(out_buffer))
-        sock.sendall(out_buffer)
-        self.logger.info('Done.')
 
     def _create_child(self):
         child_pipe, parent_pipe = socket.socketpair()

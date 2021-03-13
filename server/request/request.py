@@ -2,7 +2,7 @@ import logging
 import os
 from urllib.parse import unquote
 
-from config import config
+import config
 
 logger = logging.getLogger('main')
 
@@ -52,7 +52,7 @@ class HttpRequest:
     def __parse_url(self):
         if self.URL is not None:
             self.URL = unquote(self.URL.split("?")[0])
-            self.PATH = config['MEDIA_ROOT'].joinpath(os.path.realpath(self.URL[1:]))
+            self.PATH = config.PROJECT_ROOT.joinpath(os.path.realpath(self.URL[1:]))
 
     def __str__(self):
         return self.raw_request

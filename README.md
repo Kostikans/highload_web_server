@@ -37,10 +37,10 @@ document_root /var/www/html
 
 Run tests:
 ```
-git clone https://github.com/init/http-test-suite.git
-cd http-test-suite
+git clone https://github.com/Kostikans/highload_web_server.git
+cd highload_web_server
 
-docker build -t kostik-httpd https://github.com/init/httpd.git
+docker build -t kostik-httpd https://github.com/Kostikans/highload_web_server.git
 docker run -p 80:80 -v /etc/httpd.conf:/etc/httpd.conf:ro -v /var/www/html:/var/www/html:ro --name kostik-httpd -t kostik-httpd
 
 ./httptest.py

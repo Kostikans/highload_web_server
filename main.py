@@ -3,6 +3,7 @@ from server.server import Server
 
 logger = logging.getLogger('main')
 
+
 def main():
     logger.setLevel(logging.DEBUG)
     ch = logging.StreamHandler()
@@ -16,6 +17,7 @@ def main():
     logger.info('Run')
     my_server = Server()
     my_server.Run()
+
 
 if __name__ == '__main__':
     main()
