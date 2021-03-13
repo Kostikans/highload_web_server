@@ -7,7 +7,8 @@ import logging
 import config
 
 from server.request.request import HttpRequest
-from server.response.response import HttpResponseMethodNotAllowed, BaseHttpResponse, HttpResponseForbidden
+from server.response.response import HttpResponseMethodNotAllowed, BaseHttpResponse, HttpResponseForbidden, \
+    HttpResponseNotFound, HttpResponseOK, HttpResponseBadResponse
 
 
 class ChildController:
@@ -25,7 +26,7 @@ class Server:
     def __init__(self):
         self.logger = logging.getLogger('main')
 
-        self.BIND_ADDRESS = ('localhost', 8000)
+        self.BIND_ADDRESS = ('localhost', config.PORT)
         self.NUM_OF_CHILDS = 4
         self.BACK_LOG = 10
 
@@ -57,17 +58,43 @@ class Server:
         except Exception as e:
             result = repr(e)
 
-
         if request.METHOD not in config.METHODS_ACCEPTABLE:
             response = HttpResponseMethodNotAllowed()
             self._send_response(sock,response)
             return
 
+        if not request.OK:
+            logging.info('Done with error')
+            self._send_response(sock, HttpResponseBadResponse())
+            return
+
         if config.MEDIA_ROOT not in request.PATH.parents:
+            print(config.MEDIA_ROOT)
+            print(request.PATH.parents)
             response = HttpResponseForbidden()
             self._send_response(sock,response)
             return
 
+        if os.path.isdir(request.PATH):
+            request.PATH = str(request.PATH) + "/index.html"
+            if not os.path.isfile(request.PATH):
+                self._send_response(sock, HttpResponseForbidden())
+                return
+
+        try:
+            content = self._read_file(request.PATH)
+        except Exception as e:
+            logging.error(str(e))
+            self._send_response(sock, HttpResponseNotFound())
+            return
+
+        response = HttpResponseOK(content, filename=request.PATH, with_body=request.METHOD != "HEAD")
+        self._send_response(sock, response)
+
+    def _read_file(self, path: str) -> bytes:
+        with open(path, 'rb') as f:
+            content = f.read()
+        return content
 
     def _send_response(self, sock, response: BaseHttpResponse):
         self.logger.info(f"Sending response:{str(response)}")
