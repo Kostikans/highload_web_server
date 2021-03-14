@@ -60,19 +60,20 @@ class Server:
 
         if request.METHOD not in config.METHODS_ACCEPTABLE:
             response = HttpResponseMethodNotAllowed()
-            self._send_response(sock,response)
-            return
-
-        if not request.OK:
-            logging.info('Done with error')
-            self._send_response(sock, HttpResponseBadResponse())
+            self._send_response(sock, response)
             return
 
         if config.MEDIA_ROOT not in request.PATH.parents:
-            print(config.MEDIA_ROOT)
-            print(request.PATH.parents)
             response = HttpResponseForbidden()
-            self._send_response(sock,response)
+            self._send_response(sock, response)
+            return
+
+        if str(request.PATH).find("/../") > 0:
+            self._send_response(sock, HttpResponseForbidden())
+            return
+
+        if str(request.PATH)[len(str(request.PATH))- 1] != request.REALPATH[len(request.REALPATH) - 1] and not os.path.isdir(request.PATH):
+            self._send_response(sock, HttpResponseNotFound())
             return
 
         if os.path.isdir(request.PATH):

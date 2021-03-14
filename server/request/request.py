@@ -16,6 +16,7 @@ class HttpRequest:
         self.URL = None
         self.HTTP_VERSION = None
         self.PATH = None
+        self.REALPATH = None
         self.HEADERS = {}
 
         try:
@@ -52,7 +53,8 @@ class HttpRequest:
     def __parse_url(self):
         if self.URL is not None:
             self.URL = unquote(self.URL.split("?")[0])
-            self.PATH = config.PROJECT_ROOT.joinpath(os.path.realpath(self.URL[1:]))
+            self.PATH = config.PROJECT_ROOT.joinpath(self.URL[1:])
+            self.REALPATH = self.URL[1:]
 
     def __str__(self):
         return self.raw_request
