@@ -1,5 +1,7 @@
+import atexit
 import select
 import os
+import signal
 import sys
 import socket
 import logging
@@ -27,14 +29,13 @@ class Server:
         self.logger = logging.getLogger('main')
 
         self.BIND_ADDRESS = ('localhost', config.PORT)
-        self.NUM_OF_CHILDS = 4
+        self.NUM_OF_CHILDS = 100
+        self.MAX_CONNECTIONS = 500
         self.BACK_LOG = 10
-
-        self.childrens_pull = []
-        self.listen_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.workers = []
+        self.listen_sock = None
 
     def Run(self):
-        self._Init_Forked_Procceses()
         self._Server_Loop()
 
     def _process_request(self, buffer: bytes) -> HttpRequest:
@@ -102,75 +103,44 @@ class Server:
         sock.sendall(response.encode())
         self.logger.info("Done")
 
-    def _create_child(self):
-        child_pipe, parent_pipe = socket.socketpair()
-        pid = os.fork()
-        if pid == 0:
-            child_pipe.close()
-            try:
-                while 1:
-                    command = parent_pipe.recv(1)
-                    self.logger.info('Child get command=%s' % repr(command))
 
-                    connection, (client_ip, client_port) = self.listen_sock.accept()
-                    self.logger.info('Accept connection %s:%d' % (client_ip, client_port))
-                    self.logger.info('Child send "begin"')
-                    parent_pipe.send(b'B')
-
-                    self._handle(connection)
-
-                    connection.close()
-
-                    self.logger.info('Child send "free"')
-                    parent_pipe.send(b'F')
-
-            except KeyboardInterrupt:
-                sys.exit()
-
-        self.logger.info('Starting child with PID: %s' % pid)
-        self.childrens_pull.append(ChildController(child_pipe))
-
-        parent_pipe.close()
-        return child_pipe
-
-    def _Init_Forked_Procceses(self):
+    def _Init_Socket(self):
+        self.listen_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.listen_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.listen_sock.bind(self.BIND_ADDRESS)
-        self.listen_sock.listen(self.BACK_LOG)
-        self.listen_sock.setblocking(False)
+        self.listen_sock.listen( self.MAX_CONNECTIONS )
         self.logger.info('Listning on %s:%d...' % self.BIND_ADDRESS)
-        for i in range(self.NUM_OF_CHILDS):
-            self._create_child()
+
+
+    def _kill_all(self):
+        atexit.register(self._kill_all())
+
+        for worker in self.workers:
+            os.kill(worker, signal.SIGTERM)
 
     def _Server_Loop(self):
-        to_read = [self.listen_sock] + [c.pipe.fileno() for c in self.childrens_pull]
-        while True:
+        self._Init_Socket()
 
-            readables, writables, exceptions = select.select(to_read, [], [])
-            if self.listen_sock in readables:
-                self.logger.info('Listning socket is readable')
+        for i in range(self.NUM_OF_CHILDS):
+            pid = os.fork()
 
-                for c in self.childrens_pull:
-                    if c.is_free:
-                        self.logger.info('Send command "accept connection" to child')
-                        c.pipe.send(b'A')
-                        command = c.pipe.recv(1)
-                        self.logger.info(
-                            'Parent get command %s from child. Mark free.' %
-                            repr(command))
-                        c.is_free = False
-                        break
-                    else:
-                        self.logger.info('Child not free')
-                else:
-                    raise Exception('No more childrens.')
+            if pid == 0:
+                logging.info(f"Starting new fork: {i}")
 
-            for c in self.childrens_pull:
-                if c.pipe.fileno() in readables:
-                    command = c.pipe.recv(1)
-                    if command != b'F':
-                        raise Exception(repr(command))
-                    self.logger.info(
-                        'Parent get command %s from child. Mark free.' %
-                        repr(command))
-                    c.is_free = True
+                while True:
+                    conn, addr = self.listen_sock.accept()
+                    logging.info(f'Accepted new connection {addr}')
+
+                    try:
+                        self._handle(conn)
+                    except Exception as e:
+                        logging.error(f'error, while proccessing connection: {str(e)}')
+
+                    conn.close()
+                    logging.info(f'connection closed {addr}')
+            else:
+                self.workers.append(pid)
+
+        for worker in self.workers:
+            os.waitpid(worker, 0)
+
