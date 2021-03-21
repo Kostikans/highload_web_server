@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 
-from server import Server
+from server.server import Server
 
 logger = logging.getLogger('main')
 
