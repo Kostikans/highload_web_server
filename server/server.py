@@ -92,9 +92,9 @@ class Server:
         await asyncio.get_event_loop().sock_sendall(sock,response.encode())
 
     async def _read_file(self, path: str) -> bytes:
-        async with aiofiles.open(path, 'rb') as f:
-            content = await f.read()
-        return content
+         with open(path, 'rb') as f:
+            content = f.read()
+         return content
 
     def _send_response(self, sock, response: BaseHttpResponse):
         self.logger.info(f"Sending response:{str(response)}")
