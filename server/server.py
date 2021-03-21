@@ -27,7 +27,7 @@ class ChildController:
 
 class Server:
     def __init__(self):
-        self.logger = logging.getLogger('none')
+        self.logger = logging.getLogger('main')
 
         self.BIND_ADDRESS = ('localhost', config.PORT)
         self.NUM_OF_CHILDS = 8
