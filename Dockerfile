@@ -4,6 +4,7 @@ USER root
 
 RUN  apt-get -y update
 RUN  apt-get install -y python3
+RUN apt-get install -y sudo
 
 ADD . .
 
