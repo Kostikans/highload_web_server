@@ -8,6 +8,6 @@ RUN  apt-get install -y python3
 ADD . .
 
 EXPOSE 80
-ENV PYTHONPATH /highload_web_server
+RUN pip install -r requirements.txt
 
 CMD python3 main.py
