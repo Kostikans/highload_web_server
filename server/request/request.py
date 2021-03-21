@@ -4,8 +4,6 @@ from urllib.parse import unquote
 
 import config
 
-logger = logging.getLogger('main')
-
 
 class HttpRequest:
     def __init__(self, raw_request: str):
@@ -24,14 +22,14 @@ class HttpRequest:
             self.__parse_url()
 
         except Exception as e:
-            logger.info(f"Error while request parsing: {str(e)}")
+            logging.info(f"Error while request parsing: {str(e)}")
             return
 
     def __parse_headers(self):
         headers_list = self.raw_request.split("\r\n")
 
         if len(headers_list) == 0:
-            logger.info("length is zero")
+            logging.info("length is zero")
             return
 
         self.METHOD, self.URL, self.HTTP_VERSION = headers_list[0].split()
@@ -41,7 +39,6 @@ class HttpRequest:
         for header in headers_list[1:]:
             header_name_value = header.split(": ")
             if len(header_name_value) != 2:
-                logger.info("header has to many values")
                 continue
 
             header_name, header_value = header.split(": ")

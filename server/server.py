@@ -6,6 +6,9 @@ import sys
 import socket
 import logging
 import asyncio
+import multiprocessing
+import random
+import logging
 
 import config
 
@@ -16,29 +19,33 @@ from server.response.response import HttpResponseMethodNotAllowed, BaseHttpRespo
 
 class Server:
     def __init__(self):
-        self.logger = logging.getLogger('none')
 
         self.BIND_ADDRESS = ('localhost', config.PORT)
         self.NUM_OF_CHILDS = config.CPU_LIMIT
-        self.MAX_CONNECTIONS = config.MAX_CONNECTIONS
         self.workers = []
         self.listen_sock = None
+        atexit.register(self._kill)
 
     def _process_request(self, buffer: bytes) -> HttpRequest:
-        self.logger.info('In buffer = ' + repr(buffer))
         raw_request = buffer.decode()
         request = HttpRequest(raw_request=raw_request)
 
         return request
 
+    def _kill(self):
+        for w in self.workers:
+            w.terminate()
+            w.join()
+
     async def _handle(self, sock):
-        self.logger.info('Start to process request')
+        in_buffer = ""
+        while True:
+            part = (await asyncio.get_event_loop().sock_recv(sock, 1024)).decode()
+            in_buffer += part
+            if '\r\n' in in_buffer or len(part) == 0:
+                break
 
-        in_buffer = b''
-        while not in_buffer.endswith(b'\n'):
-            in_buffer += await asyncio.get_event_loop().sock_recv(sock, 1024)
-
-        request = self._process_request(in_buffer)
+        request = self._process_request(in_buffer.encode())
 
         if request.METHOD not in config.METHODS_ACCEPTABLE:
             response = HttpResponseMethodNotAllowed()
@@ -54,7 +61,6 @@ class Server:
             self._send_response(sock, HttpResponseForbidden())
             return
 
-
         if str(request.PATH)[len(str(request.PATH)) - 1] != request.REALPATH[
             len(request.REALPATH) - 1] and not os.path.isdir(request.PATH):
             self._send_response(sock, HttpResponseNotFound())
@@ -66,7 +72,6 @@ class Server:
                 self._send_response(sock, HttpResponseForbidden())
                 return
 
-
         try:
             content = await self._read_file(request.PATH)
         except Exception as e:
@@ -75,53 +80,53 @@ class Server:
             return
 
         response = HttpResponseOK(content, filename=request.PATH, with_body=request.METHOD != "HEAD")
-        await asyncio.get_event_loop().sock_sendall(sock,response.encode())
+        await asyncio.get_event_loop().sock_sendall(sock, response.encode())
 
     async def _read_file(self, path: str) -> bytes:
-         with open(path, 'rb') as f:
+        with open(path, 'rb') as f:
             content = f.read()
-         return content
+        return content
 
     def _send_response(self, sock, response: BaseHttpResponse):
-        self.logger.info(f"Sending response:{str(response)}")
         sock.sendall(response.encode())
-        self.logger.info("Done")
 
     def _Init_Socket(self):
         self.listen_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.listen_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.listen_sock.bind(self.BIND_ADDRESS)
-        self.listen_sock.listen(self.MAX_CONNECTIONS)
-        self.logger.info('Listning on %s:%d...' % self.BIND_ADDRESS)
+        self.listen_sock.listen(config.MAX_CONNECTIONS)
+        self.listen_sock.setblocking(False)
 
-    def _kill_all(self):
-        atexit.register(self._kill_all())
+        logging.info('Listning on %s:%d...' % self.BIND_ADDRESS)
 
-        for worker in self.workers:
-            os.kill(worker, signal.SIGTERM)
-
-    async def Server_Loop(self):
+    def Server_Loop(self):
         self._Init_Socket()
 
         for i in range(self.NUM_OF_CHILDS):
-            pid = os.fork()
+            p = multiprocessing.Process(target=self.worker, args=(self.listen_sock,))
+            p.start()
+            self.workers.append(p)
 
-            if pid == 0:
-                logging.info(f"Starting new fork: {i}")
-                while True:
-                    conn, addr = await asyncio.get_event_loop().sock_accept(self.listen_sock)
+        try:
+            for worker in self.workers:
+                worker.join()
+        except KeyboardInterrupt:
+            for worker in self.workers:
+                worker.terminate()
 
-                    logging.info(f'Accepted new connection {addr}')
+            self.listen_sock.close()
 
-                    try:
-                       await self._handle(conn)
-                    except Exception as e:
-                        logging.error(f'error, while proccessing connection: {str(e)}')
+    def worker(self, sock: socket.socket):
+        asyncio.run(self._work(sock))
 
-                    conn.close()
-                    logging.info(f'connection closed {addr}')
-            else:
-                self.workers.append(pid)
+    async def _work(self, sock: socket.socket):
+        while True:
 
-        for worker in self.workers:
-            os.waitpid(worker, 0)
+            conn, _ = await asyncio.get_event_loop().sock_accept(sock)
+
+            try:
+                await self._handle(conn)
+            except Exception as e:
+                logging.error(f'error, while proccessing connection: {str(e)}')
+
+            conn.close()
