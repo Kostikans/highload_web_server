@@ -5,6 +5,9 @@ import signal
 import sys
 import socket
 import logging
+import asyncio
+
+import aiofiles
 
 import config
 
@@ -26,17 +29,14 @@ class ChildController:
 
 class Server:
     def __init__(self):
-        self.logger = logging.getLogger('main')
+        self.logger = logging.getLogger('none')
 
         self.BIND_ADDRESS = ('localhost', config.PORT)
-        self.NUM_OF_CHILDS = 100
+        self.NUM_OF_CHILDS = 8
         self.MAX_CONNECTIONS = 500
         self.BACK_LOG = 10
         self.workers = []
         self.listen_sock = None
-
-    def Run(self):
-        self._Server_Loop()
 
     def _process_request(self, buffer: bytes) -> HttpRequest:
         self.logger.info('In buffer = ' + repr(buffer))
@@ -45,19 +45,14 @@ class Server:
         print(request.HTTP_VERSION, request.METHOD, request.URL, request.HEADERS)
         return request
 
-    def _handle(self, sock):
+    async def _handle(self, sock):
         self.logger.info('Start to process request')
 
         in_buffer = b''
         while not in_buffer.endswith(b'\n'):
-            in_buffer += sock.recv(1024)
+            in_buffer += await asyncio.get_event_loop().sock_recv(sock, 1024)
 
         request = self._process_request(in_buffer)
-
-        try:
-            result = str(eval(in_buffer, {}, {}))
-        except Exception as e:
-            result = repr(e)
 
         if request.METHOD not in config.METHODS_ACCEPTABLE:
             response = HttpResponseMethodNotAllowed()
@@ -73,7 +68,9 @@ class Server:
             self._send_response(sock, HttpResponseForbidden())
             return
 
-        if str(request.PATH)[len(str(request.PATH))- 1] != request.REALPATH[len(request.REALPATH) - 1] and not os.path.isdir(request.PATH):
+
+        if str(request.PATH)[len(str(request.PATH)) - 1] != request.REALPATH[
+            len(request.REALPATH) - 1] and not os.path.isdir(request.PATH):
             self._send_response(sock, HttpResponseNotFound())
             return
 
@@ -83,19 +80,20 @@ class Server:
                 self._send_response(sock, HttpResponseForbidden())
                 return
 
+
         try:
-            content = self._read_file(request.PATH)
+            content = await self._read_file(request.PATH)
         except Exception as e:
             logging.error(str(e))
             self._send_response(sock, HttpResponseNotFound())
             return
 
         response = HttpResponseOK(content, filename=request.PATH, with_body=request.METHOD != "HEAD")
-        self._send_response(sock, response)
+        await asyncio.get_event_loop().sock_sendall(sock,response.encode())
 
-    def _read_file(self, path: str) -> bytes:
-        with open(path, 'rb') as f:
-            content = f.read()
+    async def _read_file(self, path: str) -> bytes:
+        async with aiofiles.open(path, 'rb') as f:
+            content = await f.read()
         return content
 
     def _send_response(self, sock, response: BaseHttpResponse):
@@ -103,14 +101,12 @@ class Server:
         sock.sendall(response.encode())
         self.logger.info("Done")
 
-
     def _Init_Socket(self):
         self.listen_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.listen_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.listen_sock.bind(self.BIND_ADDRESS)
-        self.listen_sock.listen( self.MAX_CONNECTIONS )
+        self.listen_sock.listen(self.MAX_CONNECTIONS)
         self.logger.info('Listning on %s:%d...' % self.BIND_ADDRESS)
-
 
     def _kill_all(self):
         atexit.register(self._kill_all())
@@ -118,7 +114,7 @@ class Server:
         for worker in self.workers:
             os.kill(worker, signal.SIGTERM)
 
-    def _Server_Loop(self):
+    async def Server_Loop(self):
         self._Init_Socket()
 
         for i in range(self.NUM_OF_CHILDS):
@@ -126,13 +122,13 @@ class Server:
 
             if pid == 0:
                 logging.info(f"Starting new fork: {i}")
-
                 while True:
-                    conn, addr = self.listen_sock.accept()
+                    conn, addr = await asyncio.get_event_loop().sock_accept(self.listen_sock)
+
                     logging.info(f'Accepted new connection {addr}')
 
                     try:
-                        self._handle(conn)
+                       await self._handle(conn)
                     except Exception as e:
                         logging.error(f'error, while proccessing connection: {str(e)}')
 
@@ -143,4 +139,3 @@ class Server:
 
         for worker in self.workers:
             os.waitpid(worker, 0)
-

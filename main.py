@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 
@@ -18,8 +19,7 @@ def main():
     logger.addHandler(ch)
     logger.info('Run')
     my_server = Server()
-    my_server.Run()
-
+    asyncio.run(my_server.Server_Loop())
 
 if __name__ == '__main__':
     main()
