@@ -7,8 +7,6 @@ import socket
 import logging
 import asyncio
 
-import aiofiles
-
 import config
 
 from server.request.request import HttpRequest
