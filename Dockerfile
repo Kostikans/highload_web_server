@@ -9,4 +9,4 @@ ADD . .
 
 EXPOSE 80
 
-CMD python3 main.py
+CMD sudo python3 main.py
