@@ -9,4 +9,5 @@ ADD . .
 
 EXPOSE 80
 
+CMD pip3 install aiofiles
 CMD python3 main.py
