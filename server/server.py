@@ -14,25 +14,13 @@ from server.response.response import HttpResponseMethodNotAllowed, BaseHttpRespo
     HttpResponseNotFound, HttpResponseOK, HttpResponseBadResponse
 
 
-class ChildController:
-    def __init__(self, pipe):
-        self.is_free = True
-        self.pipe = pipe
-
-    def __repr__(self):
-        return '<%s is_free=%s>' % (
-            self.__class__.__name__,
-            self.is_free)
-
-
 class Server:
     def __init__(self):
-        self.logger = logging.getLogger('main')
+        self.logger = logging.getLogger('none')
 
         self.BIND_ADDRESS = ('localhost', config.PORT)
-        self.NUM_OF_CHILDS = 8
-        self.MAX_CONNECTIONS = 500
-        self.BACK_LOG = 10
+        self.NUM_OF_CHILDS = config.CPU_LIMIT
+        self.MAX_CONNECTIONS = config.MAX_CONNECTIONS
         self.workers = []
         self.listen_sock = None
 
@@ -40,7 +28,7 @@ class Server:
         self.logger.info('In buffer = ' + repr(buffer))
         raw_request = buffer.decode()
         request = HttpRequest(raw_request=raw_request)
-        print(request.HTTP_VERSION, request.METHOD, request.URL, request.HEADERS)
+
         return request
 
     async def _handle(self, sock):
