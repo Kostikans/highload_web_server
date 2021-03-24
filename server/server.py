@@ -120,6 +120,7 @@ class Server:
         asyncio.run(self._work(sock))
 
     async def _work(self, sock: socket.socket):
+
         while True:
 
             conn, _ = await asyncio.get_event_loop().sock_accept(sock)
